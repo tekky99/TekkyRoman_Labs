@@ -90,7 +90,7 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
 		end_request(req, 0);
 		return;
 	}
-
+	
 	// EXERCISE: Perform the read or write request by copying data between
 	// our data array and the request's buffer.
 	// Hint: The 'struct request' argument tells you what kind of request
@@ -98,6 +98,23 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
 	// Read about 'struct request' in <linux/blkdev.h>.
 	// Consider the 'req->sector', 'req->current_nr_sectors', and
 	// 'req->buffer' members, and the rq_data_dir() function.
+	
+	uint32_t offset = req->sector * SECTOR_SIZE;
+	uint32_t nbytes = req->current_nr_sectors * SECTOR_SIZE;
+	
+	if((offset + nbytes) > nsectors*SECTOR_SIZE){
+		eprintk("DISK SIZE OVERRUN WRONG!\n");
+		end_request(req,0);
+		return;
+	}
+	
+	if(rq_data_dir(req)==WRITE){
+		eprintk("Should process request...Write\n");
+		memcpy(d->data + offset, req->buffer, nbytes);
+	}else if (rq_data_dir(req)==READ){
+		eprintk("Should process request...Read\n");
+		memcpy(req->buffer, d->data + offset, nbytes);
+	}
 
 	// Your code here.
 	eprintk("Should process request...\n");
