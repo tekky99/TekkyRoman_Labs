@@ -94,6 +94,9 @@ static void for_each_open_file(struct task_struct *task,
  */
 static void osprd_process_request(osprd_info_t *d, struct request *req)
 {
+    uint32_t offset;
+    uint32_t nbytes;
+    
 	if (!blk_fs_request(req)) {
 		end_request(req, 0);
 		return;
@@ -107,8 +110,8 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
 	// Consider the 'req->sector', 'req->current_nr_sectors', and
 	// 'req->buffer' members, and the rq_data_dir() function.
 	
-	uint32_t offset = req->sector * SECTOR_SIZE;
-	uint32_t nbytes = req->current_nr_sectors * SECTOR_SIZE;
+	offset = req->sector * SECTOR_SIZE;
+	nbytes = req->current_nr_sectors * SECTOR_SIZE;
 	
 	if((offset + nbytes) > nsectors*SECTOR_SIZE){
 		eprintk("DISK SIZE OVERRUN WRONG!\n");
@@ -117,14 +120,12 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
 	}
 	
 	if(rq_data_dir(req)==WRITE) {
-		eprintk("Should process request...Write\n");
+		eprintk("Processed write request\n");
 		memcpy(d->data + offset, req->buffer, nbytes);
 	} else if (rq_data_dir(req)==READ) {
-		eprintk("Should process request...Read\n");
+		eprintk("Processed read request\n");
 		memcpy(req->buffer, d->data + offset, nbytes);
 	}
-    
-	eprintk("Should process request...\n");
 
 	end_request(req, 1);
 }
@@ -221,42 +222,44 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
         } else {
             if (filp_writable) {
                 if (d->writeLock || d->nReadLocks || d->queue_size) {
-                    queue_size++;
+                    d->queue_size++;
                     while (d->writeLock || d->nReadLocks) {
-                        int wait_status;
+                        int signal_raised;
                         osp_spin_unlock(&d->mutex);
-                        wait_status = wait_event_interruptible(&d->blockq, 
+                        signal_raised = wait_event_interruptible(d->blockq, 
                             (!d->writeLock && !d->nReadLocks));
                         osp_spin_lock(&d->mutex);
-                        if (wait_status == ERESTARTSYS) {
-                            queue_size--;
+                        if (signal_raised) {
+                            d->queue_size--;
                             osp_spin_unlock(&d->mutex);
                             return -ERESTARTSYS;
                         }
                     }
-                    queue_size--;
+                    d->queue_size--;
                 }
+                eprintk("Acquired write lock\n");
                 d->writeLock = 1;
                 filp->f_flags |= F_OSPRD_LOCKED;
             } else {
                 if (d->writeLock || d->queue_size) {
-                    queue_size++;
+                    d->queue_size++;
                     while (d->writeLock) {
-                        int wait_status;
+                        int signal_raised;
                         osp_spin_unlock(&d->mutex);
-                        wait_status = wait_event_interruptible(&d->blockq, !d->writeLock);
+                        signal_raised = wait_event_interruptible(d->blockq, !d->writeLock);
                         osp_spin_lock(&d->mutex);
-                        if (wait_status == ERESTARTSYS) {
-                            queue_size--;
+                        if (signal_raised) {
+                            d->queue_size--;
                             osp_spin_unlock(&d->mutex);
                             return -ERESTARTSYS;
                         }
                     }
-                    queue_size--;
+                    d->queue_size--;
                     
                     // Wake up next process in case it also wants to obtain read lock
                     wake_up_interruptible(&d->blockq);
                 }
+                eprintk("Acquired read lock\n");
                 d->nReadLocks++;
                 filp->f_flags |= F_OSPRD_LOCKED;
             }
@@ -280,6 +283,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
                 if (d->writeLock || d->nReadLocks || d->queue_size)
                     r = -EBUSY;
                 else {
+                    eprintk("Acquired write lock\n");
                     d->writeLock = 1;
                     filp->f_flags |= F_OSPRD_LOCKED;
                 }
@@ -287,6 +291,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
                 if (d->writeLock || d->queue_size)
                     r = -EBUSY;
                 else {
+                    eprintk("Acquired read lock\n");
                     d->nReadLocks++;
                     filp->f_flags |= F_OSPRD_LOCKED;
                 }
@@ -302,11 +307,13 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
         // you need, and return 0.
         
         // Your code here (instead of the next line).
+        eprintk("Attempting to release\n");
         
         if (filp->f_flags & F_OSPRD_LOCKED) {
-            flip->f_flags &= ~F_OSPRD_LOCKED;
+            filp->f_flags &= ~F_OSPRD_LOCKED;
             if (filp_writable) {
                 if (d->writeLock) {
+                    eprintk("Released write lock\n");
                     d->writeLock = 0;
                     wake_up_interruptible(&d->blockq);
                 }
@@ -314,6 +321,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
                     r = -EINVAL;
             } else {
                 if (d->nReadLocks) {
+                    eprintk("Released read lock\n");
                     d->nReadLocks--;
                     if (!d->nReadLocks)
                         wake_up_interruptible(&d->blockq);
