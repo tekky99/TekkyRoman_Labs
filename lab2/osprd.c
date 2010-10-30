@@ -64,6 +64,8 @@ typedef struct osprd_info {
                                     
     int deadlock;                   // Detects deadlock
     
+    struct file *req_filp;          // Request file;
+    
     /* HINT: You may want to add additional fields to help 
              in detecting deadlock or enforcing fairness!  
     */
@@ -187,6 +189,8 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
     // This line avoids compiler warnings; you may remove it.
     (void) filp_writable, (void) d;
+    
+    d->req_filp = filp;
     
     // Set the spin lock to prevent race conditions
     osp_spin_lock(&d->mutex);
@@ -354,15 +358,27 @@ static void osprd_setup(osprd_info_t *d)
     /* Add code here if you add fields to osprd_info_t. */
 }
 
-void detect_deadlock_hook(struct file *filp, osprd_info_t *d) {
+void detect_deadlock_hook(struct file *filp, osprd_info_t *d) 
+{
        // This hook function will be passed to for_each_file.
        // and detects whether the current process already has
        // a lock on this file
-       osprd_info_t *i = file2osprd(filp);
-       if (i != NULL && i == d)
-          if (filp->f_flags & F_OSPRD_LOCKED)
-              d->deadlock = 1;
-   }
+        if (filp == d->req_filp){
+            if (filp->f_flags & F_OSPRD_LOCKED)
+                d->deadlock = 1;
+        }
+        else {
+            osprd_info_t *i = file2osprd(filp);
+            if (i != NULL && i == d){
+                if (filp->f_flags & F_OSPRD_LOCKED){
+                    if (!(filp->f_flags & FMODE_WRITE))
+                        d->deadlock = 1;
+                    else if(!(d->req_filp->f_flags & FMODE_WRITE))
+                        d->deadlock = 1;
+                }
+            }
+        }
+}
 
 
 /*****************************************************************************/
