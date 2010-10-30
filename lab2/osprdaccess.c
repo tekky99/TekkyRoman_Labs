@@ -223,14 +223,6 @@ int main(int argc, char *argv[])
 		transfer(STDIN_FILENO, devfd, size);
 	else
 		transfer(devfd, STDOUT_FILENO, size);
-     
-    // Release locks
-    if (dolock || dotrylock) {
-        if (ioctl(devfd, OSPRDIOCRELEASE, NULL) == -1) {
-			perror("ioctl OSPRDIOCRELEASE");
-			exit(1);
-        }
-    }
 
 	exit(0);
 }

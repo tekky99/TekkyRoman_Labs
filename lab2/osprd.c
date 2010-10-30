@@ -85,6 +85,9 @@ static osprd_info_t *file2osprd(struct file *filp);
 static void for_each_open_file(struct task_struct *task,
                    void (*hook)(struct file *filp, osprd_info_t *d),
                    osprd_info_t *d);
+int osprd_ioctl(struct inode *inode, struct file *filp,
+        unsigned int cmd, unsigned long arg);				   
+
 
 
 /*
@@ -154,6 +157,8 @@ static int osprd_release(struct inode *inode, struct file *filp)
         // EXERCISE: If the user closes a ramdisk file that holds
         // a lock, release the lock.  Also wake up blocked processes
         // as appropriate.
+		if (filp->f_flags & F_OSPRD_LOCKED)
+			osprd_ioctl(inode, filp, OSPRDIOCRELEASE, NULL);
 
         // Your code here.
 
@@ -217,7 +222,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
         eprintk("Attempting to acquire\n");
         if (filp->f_flags & F_OSPRD_LOCKED) {
-            //Process already has a lock. Avoid deadlock.
+            //File pointer already has a lock. Avoid deadlock.
             r = -EDEADLK;
         } else {
             if (filp_writable) {
