@@ -62,8 +62,7 @@ typedef struct osprd_info {
     int writeLock;                  // Keep track of if a process
                                     // has a write lock on the device
                                     
-    unsigned int queue_size;        // Keep track of the number of processes
-                                    // in the queue
+    int deadlock;                   // Detects deadlock
     
     /* HINT: You may want to add additional fields to help 
              in detecting deadlock or enforcing fairness!  
@@ -86,7 +85,8 @@ static void for_each_open_file(struct task_struct *task,
                    void (*hook)(struct file *filp, osprd_info_t *d),
                    osprd_info_t *d);
 int osprd_ioctl(struct inode *inode, struct file *filp,
-        unsigned int cmd, unsigned long arg);				   
+        unsigned int cmd, unsigned long arg);
+void detect_deadlock_hook(struct file *filp, osprd_info_t *d);        
 
 
 
@@ -158,7 +158,7 @@ static int osprd_release(struct inode *inode, struct file *filp)
         // a lock, release the lock.  Also wake up blocked processes
         // as appropriate.
 		if (filp->f_flags & F_OSPRD_LOCKED)
-			osprd_ioctl(inode, filp, OSPRDIOCRELEASE, NULL);
+			osprd_ioctl(inode, filp, OSPRDIOCRELEASE, 0);
 
         // Your code here.
 
@@ -221,13 +221,14 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
         // Otherwise, if we can grant the lock request, return 0.
 
         eprintk("Attempting to acquire\n");
-        if (filp->f_flags & F_OSPRD_LOCKED) {
-            //File pointer already has a lock. Avoid deadlock.
+        d->deadlock = 0;
+        for_each_open_file(current, detect_deadlock_hook, d);
+        if (d->deadlock) {
+            //Process already has a lock. Avoid deadlock.
             r = -EDEADLK;
         } else {
             if (filp_writable) {
-                if (d->writeLock || d->nReadLocks || d->queue_size) {
-                    d->queue_size++;
+                if (d->writeLock || d->nReadLocks || waitqueue_active(&d->blockq)) {
                     while (d->writeLock || d->nReadLocks) {
                         int signal_raised;
                         osp_spin_unlock(&d->mutex);
@@ -235,31 +236,26 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
                             (!d->writeLock && !d->nReadLocks));
                         osp_spin_lock(&d->mutex);
                         if (signal_raised) {
-                            d->queue_size--;
                             osp_spin_unlock(&d->mutex);
                             return -ERESTARTSYS;
                         }
                     }
-                    d->queue_size--;
                 }
                 eprintk("Acquired write lock\n");
                 d->writeLock = 1;
                 filp->f_flags |= F_OSPRD_LOCKED;
             } else {
-                if (d->writeLock || d->queue_size) {
-                    d->queue_size++;
+                if (d->writeLock || waitqueue_active(&d->blockq)) {
                     while (d->writeLock) {
                         int signal_raised;
                         osp_spin_unlock(&d->mutex);
                         signal_raised = wait_event_interruptible(d->blockq, !d->writeLock);
                         osp_spin_lock(&d->mutex);
                         if (signal_raised) {
-                            d->queue_size--;
                             osp_spin_unlock(&d->mutex);
                             return -ERESTARTSYS;
                         }
                     }
-                    d->queue_size--;
                     
                     // Wake up next process in case it also wants to obtain read lock
                     wake_up_interruptible(&d->blockq);
@@ -280,12 +276,14 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
         // Your code here (instead of the next two lines).
         eprintk("Attempting to try acquire\n");
-        if (filp->f_flags & F_OSPRD_LOCKED) {
+        d->deadlock = 0;
+        for_each_open_file(current, detect_deadlock_hook, d);
+        if (d->deadlock) {
             //Process already has a lock. Avoid deadlock.
             r = -EBUSY;
         } else {
             if (filp_writable) {
-                if (d->writeLock || d->nReadLocks || d->queue_size)
+                if (d->writeLock || d->nReadLocks || waitqueue_active(&d->blockq))
                     r = -EBUSY;
                 else {
                     eprintk("Acquired write lock\n");
@@ -293,7 +291,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
                     filp->f_flags |= F_OSPRD_LOCKED;
                 }
             } else {
-                if (d->writeLock || d->queue_size)
+                if (d->writeLock || waitqueue_active(&d->blockq))
                     r = -EBUSY;
                 else {
                     eprintk("Acquired read lock\n");
@@ -352,9 +350,19 @@ static void osprd_setup(osprd_info_t *d)
     osp_spin_lock_init(&d->mutex);
     d->nReadLocks = 0;
     d->writeLock = 0;
-    d->queue_size = 0;
+    d->deadlock = 0;
     /* Add code here if you add fields to osprd_info_t. */
 }
+
+void detect_deadlock_hook(struct file *filp, osprd_info_t *d) {
+       // This hook function will be passed to for_each_file.
+       // and detects whether the current process already has
+       // a lock on this file
+       osprd_info_t *i = file2osprd(filp);
+       if (i != NULL && i == d)
+          if (filp->f_flags & F_OSPRD_LOCKED)
+              d->deadlock = 1;
+   }
 
 
 /*****************************************************************************/
