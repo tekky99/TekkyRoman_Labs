@@ -614,8 +614,22 @@ static void
 free_block(uint32_t blockno)
 {
 	/* EXERCISE: Your code here */
-	
+	uint32_t bitmap_block = OSPFS_FREEMAP_BLK;
+	uint32_t bitmap;
 	// I GOT THIS
+	
+	if (!(blockno < ospfs_super->os_firstinob + ospfs_super->os_ninodes))
+	{
+		do{
+			bitmap = ospfs_block(bitmap_block);
+			if (blockno < OSPFS_BLKBITSIZE){
+				bitvector_clear(bitmap,blockno);
+				return;
+			}
+			blockno -= OSPFS_BLKBITSIZE;
+			bitmap_block++;
+		} while (bitmap_block != ospfs_super->os_firstinob);
+	}
 }
 
 
@@ -654,6 +668,9 @@ indir2_index(uint32_t b)
 	// Your code here.
 	
 	// I GOT THIS
+	
+	if (b >= OSPFS_NDIRECT + OSPFS_NINDIRECT)
+		return 0;
 	return -1;
 }
 
@@ -675,7 +692,12 @@ indir_index(uint32_t b)
 	// Your code here.
 	
 	// I GOT THIS
-	return -1;
+	
+	if (b < OSPFS_NDIRECT)
+		return -1;
+	else if (b < OSPFS_NDIRECT + OSPFS_NINDIRECT)
+		return 0;
+	return (b - OSPFS_NDIRECT - OSPFS_NINDIRECT)/OSPFS_NINDIRECT;
 }
 
 
@@ -694,7 +716,10 @@ direct_index(uint32_t b)
 	// Your code here.
 	
 	// I GOT THIS
-	return -1;
+	
+	if (b < OSPFS_NDIRECT)
+		return b;
+	return b-OSPFS_NDIRECT;
 }
 
 
