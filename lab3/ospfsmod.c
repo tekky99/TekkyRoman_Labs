@@ -561,6 +561,8 @@ static uint32_t
 allocate_block(void)
 {
 	/* EXERCISE: Your code here */
+	// I GOT THIS
+	
 	return 0;
 }
 
@@ -580,6 +582,8 @@ static void
 free_block(uint32_t blockno)
 {
 	/* EXERCISE: Your code here */
+	
+	// I GOT THIS
 }
 
 
@@ -616,6 +620,8 @@ static int32_t
 indir2_index(uint32_t b)
 {
 	// Your code here.
+	
+	// I GOT THIS
 	return -1;
 }
 
@@ -635,6 +641,8 @@ static int32_t
 indir_index(uint32_t b)
 {
 	// Your code here.
+	
+	// I GOT THIS
 	return -1;
 }
 
@@ -652,6 +660,8 @@ static int32_t
 direct_index(uint32_t b)
 {
 	// Your code here.
+	
+	// I GOT THIS
 	return -1;
 }
 
@@ -697,6 +707,8 @@ add_block(ospfs_inode_t *oi)
 	uint32_t *allocated[2] = { 0, 0 };
 
 	/* EXERCISE: Your code here */
+	
+	// I GOT THIS
 	return -EIO; // Replace this line
 }
 
@@ -730,6 +742,8 @@ remove_block(ospfs_inode_t *oi)
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
 
 	/* EXERCISE: Your code here */
+	
+	// I GOT THIS
 	return -EIO; // Replace this line
 }
 
