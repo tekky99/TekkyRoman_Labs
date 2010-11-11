@@ -562,7 +562,39 @@ allocate_block(void)
 {
 	/* EXERCISE: Your code here */
 	// I GOT THIS
+	uint32_t bitmap_block = OSPFS_FREEMAP_BLK;
+	void* bitmap;
+	uint32_t data_block;
 	
+	do{
+		// Get the next bitmap block and reset the data_block counter
+		bitmap = ospfs_block(bitmap_block);
+		data_block = 0;
+		
+		// Keep within one bitmap block
+		while (data_block < OSPFS_BLKBITSIZE){
+		
+			// Check to see if a data block is available
+			if(!bitvector_test(bitmap, data_block)){
+				
+				// Mark the data block as in use.
+				bitvector_set(bitmap, data_block);
+				
+				// If it is, calculate the offset (including previous bitmap blocks)
+				data_block = (bitmap_block-OSPFS_FREEMAP_BLK)*OSPFS_BLKBITSIZE + data_block;
+				
+				// Return data block pointer
+				return ospfs_block(data_block);
+			}
+			
+			data_block++;
+			
+		}
+	
+	// keep within bitmap blocks area.
+	} while (bitmap_block != ospfs_super->os_firstinob);
+	
+	// If loop exited, then there are no free blocks.
 	return 0;
 }
 
@@ -800,6 +832,8 @@ change_size(ospfs_inode_t *oi, uint32_t new_size)
 	}
 
 	/* EXERCISE: Make sure you update necessary file meta data
+	
+	// I GOT THIS
 	             and return the proper value. */
 	return -EIO; // Replace this line
 }
