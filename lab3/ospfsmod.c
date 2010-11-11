@@ -558,8 +558,42 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 static uint32_t
 allocate_block(void)
 {
-    /* EXERCISE: Your code here */
-    return 0;
+	/* EXERCISE: Your code here */
+	// I GOT THIS
+	uint32_t bitmap_block = OSPFS_FREEMAP_BLK;
+	void* bitmap;
+	uint32_t data_block;
+	
+	do{
+		// Get the next bitmap block and reset the data_block counter
+		bitmap = ospfs_block(bitmap_block);
+		data_block = 0;
+		
+		// Keep within one bitmap block
+		while (data_block < OSPFS_BLKBITSIZE){
+		
+			// Check to see if a data block is available
+			if(!bitvector_test(bitmap, data_block)){
+				
+				// Mark the data block as in use.
+				bitvector_set(bitmap, data_block);
+				
+				// If it is, calculate the offset (including previous bitmap blocks)
+				data_block = (bitmap_block-OSPFS_FREEMAP_BLK)*OSPFS_BLKBITSIZE + data_block;
+				
+				// Return data block pointer
+				return ospfs_block(data_block);
+			}
+			
+			data_block++;
+			
+		}
+	
+	// keep within bitmap blocks area.
+	} while (bitmap_block != ospfs_super->os_firstinob);
+	
+	// If loop exited, then there are no free blocks.
+	return 0;
 }
 
 
@@ -577,7 +611,23 @@ allocate_block(void)
 static void
 free_block(uint32_t blockno)
 {
-    /* EXERCISE: Your code here */
+	/* EXERCISE: Your code here */
+	uint32_t bitmap_block = OSPFS_FREEMAP_BLK;
+	uint32_t bitmap;
+	// I GOT THIS
+	
+	if (!(blockno < ospfs_super->os_firstinob + ospfs_super->os_ninodes))
+	{
+		do{
+			bitmap = ospfs_block(bitmap_block);
+			if (blockno < OSPFS_BLKBITSIZE){
+				bitvector_clear(bitmap,blockno);
+				return;
+			}
+			blockno -= OSPFS_BLKBITSIZE;
+			bitmap_block++;
+		} while (bitmap_block != ospfs_super->os_firstinob);
+	}
 }
 
 
@@ -613,8 +663,13 @@ free_block(uint32_t blockno)
 static int32_t
 indir2_index(uint32_t b)
 {
-    // Your code here.
-    return -1;
+	// Your code here.
+	
+	// I GOT THIS
+	
+	if (b >= OSPFS_NDIRECT + OSPFS_NINDIRECT)
+		return 0;
+	return -1;
 }
 
 
@@ -632,8 +687,15 @@ indir2_index(uint32_t b)
 static int32_t
 indir_index(uint32_t b)
 {
-    // Your code here.
-    return -1;
+	// Your code here.
+	
+	// I GOT THIS
+	
+	if (b < OSPFS_NDIRECT)
+		return -1;
+	else if (b < OSPFS_NDIRECT + OSPFS_NINDIRECT)
+		return 0;
+	return (b - OSPFS_NDIRECT - OSPFS_NINDIRECT)/OSPFS_NINDIRECT;
 }
 
 
@@ -649,8 +711,13 @@ indir_index(uint32_t b)
 static int32_t
 direct_index(uint32_t b)
 {
-    // Your code here.
-    return -1;
+	// Your code here.
+	
+	// I GOT THIS
+	
+	if (b < OSPFS_NDIRECT)
+		return b;
+	return b-OSPFS_NDIRECT;
 }
 
 
@@ -688,14 +755,16 @@ direct_index(uint32_t b)
 static int
 add_block(ospfs_inode_t *oi)
 {
-    // current number of blocks in file
-    uint32_t n = ospfs_size2nblocks(oi->oi_size);
-    
-    // keep track of allocations to free in case of -ENOSPC
-    uint32_t *allocated[2] = { 0, 0 };
+	// current number of blocks in file
+	uint32_t n = ospfs_size2nblocks(oi->oi_size);
+	
+	// keep track of allocations to free in case of -ENOSPC
+	uint32_t *allocated[2] = { 0, 0 };
 
-    /* EXERCISE: Your code here */
-    return -EIO; // Replace this line
+	/* EXERCISE: Your code here */
+	
+	// I GOT THIS
+	return -EIO; // Replace this line
 }
 
 
@@ -727,8 +796,10 @@ remove_block(ospfs_inode_t *oi)
     // current number of blocks in file
     uint32_t n = ospfs_size2nblocks(oi->oi_size);
 
-    /* EXERCISE: Your code here */
-    return -EIO; // Replace this line
+	/* EXERCISE: Your code here */
+	
+	// I GOT THIS
+	return -EIO; // Replace this line
 }
 
 
@@ -771,21 +842,23 @@ remove_block(ospfs_inode_t *oi)
 static int
 change_size(ospfs_inode_t *oi, uint32_t new_size)
 {
-    uint32_t old_size = oi->oi_size;
-    int r = 0;
+	uint32_t old_size = oi->oi_size;
+	int r = 0;
 
-    while (ospfs_size2nblocks(oi->oi_size) < ospfs_size2nblocks(new_size)) {
-            /* EXERCISE: Your code here */
-        return -EIO; // Replace this line
-    }
-    while (ospfs_size2nblocks(oi->oi_size) > ospfs_size2nblocks(new_size)) {
-            /* EXERCISE: Your code here */
-        return -EIO; // Replace this line
-    }
+	while (ospfs_size2nblocks(oi->oi_size) < ospfs_size2nblocks(new_size)) {
+	        /* EXERCISE: Your code here */
+		return -EIO; // Replace this line
+	}
+	while (ospfs_size2nblocks(oi->oi_size) > ospfs_size2nblocks(new_size)) {
+	        /* EXERCISE: Your code here */
+		return -EIO; // Replace this line
+	}
 
-    /* EXERCISE: Make sure you update necessary file meta data
-                 and return the proper value. */
-    return -EIO; // Replace this line
+	/* EXERCISE: Make sure you update necessary file meta data
+	
+	// I GOT THIS
+	             and return the proper value. */
+	return -EIO; // Replace this line
 }
 
 
