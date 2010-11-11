@@ -253,7 +253,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
                     while (d->writeLock) {
                         int signal_raised;
                         osp_spin_unlock(&d->mutex);
-                        signal_raised = wait_event_interruptible(d->blockq, !d->                                                                writeLock);
+                        signal_raised = wait_event_interruptible(d->blockq, !d->writeLock);
                         osp_spin_lock(&d->mutex);
                         if (signal_raised) {
                             osp_spin_unlock(&d->mutex);
