@@ -940,13 +940,94 @@ add_block(ospfs_inode_t *oi)
 // you set the block pointer to 0.  Don't leave pointers to
 // deallocated blocks laying around!
 
+static void empty_block(uint32_t blockno){
+	uint32_t *block_dat = (uint32_t *)ospfs_block(blockno);
+	uint32_t count = 0;
+	while(count < OSPFS_BLKSIZE){
+		*(block_dat+count) = 0;
+		count++;
+	}
+}
+
 static int
 remove_block(ospfs_inode_t *oi)
 {
     // current number of blocks in file
     uint32_t n = ospfs_size2nblocks(oi->oi_size);
+	
+	uint32_t block_indir_offset;
+	uint32_t block_indir2_offset;
+	uint32_t *indir_block;
+	uint32_t *indir_block2;
 
     /* EXERCISE: Your code here */
+	// If double indirect
+	if (!indir2_index(n)){
+		// Get first level ind block and offset
+		if ((indir_block = (uint32_t *)ospfs_block(oi->oi_indirect2)) == 0)
+			goto RMIOE;
+		block_indir_offset = indir_index(n);
+		
+		// Get second level ind block...
+		if ((indir_block2 = (uint32_t *)ospfs_block(*(indir_block + block_indir_offset))) == 0)
+			goto RMIOE;
+		block_indir2_offset = 0;
+		
+		// ...and offset
+		while (*(indir_block2+block_indir2_offset+1) != 0);
+			block_indir2_offset++;
+		
+		// Free the block
+		empty_block(*(indir_block2 + block_indir2_offset));
+		free_block(*(indir_block2 + block_indir2_offset));
+		
+		// If that was the first block of a 2nd level indirect block
+		if (block_indir2_offset == 0){
+			// free the empty indirect block
+			empty_block(*(indir_block + block_indir_offset));
+			free_block(*(indir_block + block_indir_offset));
+		}
+		
+		// if this was the first block if the 1st level indirect block
+		if (block_indir_offset == 0){
+			// free the empty indirect block
+			empty_block(oi->oi_indirect2);
+			free_block(oi->oi_indirect2);
+		}
+		
+		oi->oi_size--;
+		return 0;
+	}
+	// If the block is in singly indirect block,
+	else if (!indir_index(n)){
+	
+		// Get the block and offset
+		if ((indir_block = (uint32_t *)ospfs_block(oi->oi_indirect)) == 0)
+			goto RMIOE;
+		block_indir_offset = direct_index(n);
+		
+		// Free the blocks
+		empty_block(*(indir_block + block_indir_offset));
+		free_block(*(indir_block + block_indir_offset));
+		
+		// If the offset is 0
+		if (block_indir_offset == 0){
+			// Clear the empty indirect block
+			empty_block(oi->oi_indirect);
+			free_block(oi->oi_indirect);
+		}
+		
+		oi->oi_size--;
+		return 0;
+	}
+	// If the block is in a direct block.
+	else{
+		empty_block(oi->oi_direct[n]);
+		free_block(oi->oi_direct[n]);
+		
+		oi->oi_size--;
+		return 0;
+	}
 	RMIOE:
 		return -EIO; // Replace this line
 }
@@ -993,21 +1074,27 @@ change_size(ospfs_inode_t *oi, uint32_t new_size)
 {
     uint32_t old_size = oi->oi_size;
     int r = 0;
-
+	
+	// Adding blocks
     while (ospfs_size2nblocks(oi->oi_size) < ospfs_size2nblocks(new_size)) {
             /* EXERCISE: Your code here */
-        return -EIO; // Replace this line
+		if ((r = add_block(oi))!= 0){
+			while(ospfs_size2nblocks(oi->oi_size) != old_size)
+				remove_block(oi);
+			return r;
+		}
     }
     while (ospfs_size2nblocks(oi->oi_size) > ospfs_size2nblocks(new_size)) {
-            /* EXERCISE: Your code here */
-        return -EIO; // Replace this line
+        if ((r = remove_block(oi)) != 0)
+			return r; // Replace this line
     }
 
     /* EXERCISE: Make sure you update necessary file meta data
-    
-    // I GOT THIS
                  and return the proper value. */
-    return -EIO; // Replace this line
+				 
+	oi->oi_size = new_size;
+	
+    return 0; // Replace this line
 }
 
 
