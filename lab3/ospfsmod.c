@@ -139,6 +139,7 @@ ospfs_size2nblocks(uint32_t size)
 }
 
 
+
 // ospfs_block(blockno)
 //    Use this function to load a block's contents from "disk".
 //
@@ -605,12 +606,14 @@ allocate_block(void)
                 data_block = (bitmap_block-OSPFS_FREEMAP_BLK)*OSPFS_BLKBITSIZE + data_block;
                 
                 // Return data block pointer
-                return ospfs_block(data_block);
+                return data_block;
             }
             
             data_block++;
             
         }
+		
+		bitmap_block++;
     
     // keep within bitmap blocks area.
     } while (bitmap_block != ospfs_super->os_firstinob);
@@ -782,12 +785,94 @@ add_block(ospfs_inode_t *oi)
     uint32_t n = ospfs_size2nblocks(oi->oi_size);
     
     // keep track of allocations to free in case of -ENOSPC
-    uint32_t *allocated[2] = { 0, 0 };
+    uint32_t allocated[2] = { 0, 0 };
 
     /* EXERCISE: Your code here */
-    
     // I GOT THIS
-    return -EIO; // Replace this line
+	
+	uint32_t block_indir_offset;
+	uint32_t block_indir2_offset;
+	uint32_t *indir_block;
+	uint32_t *indir_block2;
+	
+	// if the block is an double indirect block,
+	if (!indir2_index(n)){
+		// If the first level double indirect block isn't allocated, 
+		if (indir2_index(n-1)){
+			if ((oi->oi_indirect2==allocate_block()) == 0)
+				goto NOSPCERR;
+			allocated[0] = oi->oi_indirect2;
+			if ((*(uint32_t *)(ospfs_block(oi->oi_indirect2)) = allocate_block()) == 0)
+				goto NOSPCERR;
+			allocated[1] = *(uint32_t *)(ospfs_block(oi->oi_indirect2));
+		}
+		// Store the first level indirect block and what doubly indirect block itll be in
+		indir_block = (uint32_t *)ospfs_block(oi->oi_indirect2);
+		block_indir_offset = indir_index(n);
+		
+		// If the doubly indirect block does not exists.
+		if (*(indir_block+block_indir_offset) == 0){
+			if ((*(indir_block+block_indir_offset) = allocate_block()) == 0)
+				goto NOSPCERR;
+			allocated[1] = *(indir_block+block_indir_offset);
+		}
+		
+		// Store the second level indirect blocks and offset.
+		indir_block2 = (uint32_t *)ospfs_block(*(indir_block + block_indir_offset));
+		block_indir2_offset = 0;
+		
+		// Run throught he second level indirect block until you find an empty link.
+		while (*(indir_block2+block_indir2_offset) != 0);
+			block_indir2_offset++;
+			
+		// If there's space to allocate, then copy the block address into the indir block
+		if (*(indir_block2+block_indir2_offset) = allocate_block() == 0)
+			goto NOSPCERR;
+			
+		// Increment the file size
+		oi->oi_size++;
+		return 0;
+	}
+	// If the block is in an indirect block
+	else if (!indir_index(n)) {
+		// If you need to allocate the indirect block
+		if (n-1 < OSPFS_NDIRECT) {
+			if ((oi->oi_indirect) = allocate_block() == 0)
+				goto NOSPCERR;
+			allocated[0] = oi->oi_indirect;
+		}
+		
+		// Store the indirect block and the offset.
+		indir_block = (uint32_t *)ospfs_block(oi->oi_indirect);
+		block_indir_offset = direct_index(n);
+		
+		// Allocate the extra block if possible
+		if ((*(indir_block + block_indir_offset) = allocate_block()) == 0)
+			goto NOSPCERR;
+			
+		// increment the file size
+		oi->oi_size++;
+		return 0;
+	}
+	// If the block is in the direct block
+	else{
+	
+		// Allocate the extra block if possible
+		if ((oi->oi_direct[n] = allocate_block) == 0)
+			goto NOSPCERR;
+		
+		// increment the file size.
+		oi->oi_size++;
+		return 0;
+	}	
+	
+	IOERR:
+		return -EIO;	
+	NOSPCERR:
+		free_block(allocated[0]);
+		free_block(allocated[1]);
+		return -ENOSPC;
+	
 }
 
 
@@ -820,9 +905,8 @@ remove_block(ospfs_inode_t *oi)
     uint32_t n = ospfs_size2nblocks(oi->oi_size);
 
     /* EXERCISE: Your code here */
-    
-    // I GOT THIS
-    return -EIO; // Replace this line
+	RMIOE:
+		return -EIO; // Replace this line
 }
 
 
