@@ -667,8 +667,6 @@ indir2_index(uint32_t b)
 {
 	// Your code here.
 	
-	// I GOT THIS
-	
 	if (b >= OSPFS_NDIRECT + OSPFS_NINDIRECT)
 		return 0;
 	return -1;
