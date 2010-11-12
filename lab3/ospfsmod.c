@@ -344,8 +344,8 @@ ospfs_delete_dentry(struct dentry *dentry)
 //    looks up a named entry.
 //
 //   Input:  dir    -- The Linux 'struct inode' for the directory.
-//               You can extract the corresponding 'ospfs_inode_t'
-//               by calling 'ospfs_inode' with the relevant inode number.
+//                  You can extract the corresponding 'ospfs_inode_t'
+//                  by calling 'ospfs_inode' with the relevant inode number.
 //           dentry -- The name of the entry being looked up.
 //   Effect: Looks up the entry named 'dentry'.  If found, attaches the
 //         entry's 'struct inode' to the 'dentry'.  If not found, returns
@@ -987,7 +987,7 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 //    Linux calls this function to write data to a file.
 //    It is the file_operations.write callback.
 //
-//   Inputs:  filp    -- a file pointer
+//   Inputs:  filp      -- a file pointer
 //            buffer    -- a user space ptr where data should be copied from
 //            count     -- the amount of data to write
 //            f_pos     -- points to the file position
@@ -997,8 +997,6 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 //   into the file.  Use copy_from_user() to accomplish this. Unlike read(),
 //   where you cannot read past the end of the file, it is OK to write past
 //   the end of the file; this should simply change the file's size.
-//
-//   EXERCISE: Complete this function.
 
 static ssize_t
 ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *f_pos)
@@ -1006,14 +1004,17 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
     ospfs_inode_t *oi = ospfs_inode(filp->f_dentry->d_inode->i_ino);
     int retval = 0;
     size_t amount = 0;
-
-    // Support files opened with the O_APPEND flag.  To detect O_APPEND,
-    // use struct file's f_flags field and the O_APPEND bit.
-    /* EXERCISE: Your code here */
+    int append = filp->f_flags & O_APPEND;
 
     // If the user is writing past the end of the file, change the file's
     // size to accomodate the request.  (Use change_size().)
-    /* EXERCISE: Your code here */
+    if (append) {
+        change_size(oi, *f_pos+count);
+    }
+    else {
+        change_size(oi, count);
+        *f_pos = 0;
+    }
 
     // Copy data block by block
     while (amount < count && retval >= 0) {
@@ -1029,12 +1030,16 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
         data = ospfs_block(blockno);
 
         // Figure out how much data is left in this block to write.
-        // Copy data from user space. Return -EFAULT if unable to read
+        n = (count-amount < OSPFS_BLKSIZE-*f_pos%OSPFS_BLKSIZE) ? 
+             count-amount : 
+             OSPFS_BLKSIZE-*f_pos%OSPFS_BLKSIZE;
+        
+        // Copy data from user space. Return -EFAULT if unable to
         // read user space.
-        // Keep track of the number of bytes moved in 'n'.
-        /* EXERCISE: Your code here */
-        retval = -EIO; // Replace these lines
-        goto done;
+        if (copy_from_user(data+*f_pos%OSPFS_BLKSIZE, buffer, n)) {
+            retval = -EFAULT;
+            goto done;
+        }
 
         buffer += n;
         amount += n;
@@ -1155,15 +1160,15 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 //   Linux calls this function to create a regular file.
 //   It is the ospfs_dir_inode_ops.create callback.
 //
-//   Inputs:  dir    -- a pointer to the containing directory's inode
+//   Inputs:  dir       -- a pointer to the containing directory's inode
 //            dentry    -- the name of the file that should be created
 //                         The only important elements are:
 //                         dentry->d_name.name: filename (char array, not null
 //                            terminated)
 //                         dentry->d_name.len: length of filename
-//            mode    -- the permissions mode for the file (set the new
-//               inode's oi_mode field to this value)
-//          nd    -- ignore this
+//            mode      -- the permissions mode for the file (set the new
+//                         inode's oi_mode field to this value)
+//            nd        -- ignore this
 //   Returns: 0 on success, -(error code) on error.  In particular:
 //               -ENAMETOOLONG if dentry->d_name.len is too large;
 //               -EEXIST       if a file named the same as 'dentry' already
@@ -1184,18 +1189,65 @@ static int
 ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidata *nd)
 {
     ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
+    ospfs_super_t *osup = ospfs_block(1);
+    ospfs_direntry_t *od;
+    ospfs_inode_t *new_oi;
+    uint32_t blockno;
     uint32_t entry_ino = 0;
-    /* EXERCISE: Your code here. */
-    return -EINVAL; // Replace this line
+    uint32_t i;
+    
+    // Check if file already exists
+    if (ospfs_dir_lookup(dir, dentry, NULL)->d_inode)
+        return -EEXIST;
+    
+    // Check for name too long error
+    if (dentry->d_name.len > OSPFS_MAXNAMELEN)
+        return -ENAMETOOLONG;
+    
+    // Allocate a new directory entry
+    i = dir_oi->oi_size;
+    change_size(dir_oi, i+OSPFS_DIRENTRY_SIZE);
+    
+    // Access new directory entry
+    blockno = ospfs_inode_blockno(dir_oi, i);
+    if (blockno == 0) {
+        return -EIO;
+    }
+    od = (ospfs_block(blockno) + i%OSPFS_BLKSIZE);
+    
+    // Search for unused node
+    i = 0;
+    while (i < osup->os_ninodes) {
+        if (bitvector_test(ospfs_block(osup->os_firstinob), i)) {
+            entry_ino = i;
+            break;
+        }
+        i++;
+    }
+    
+    if (!entry_ino)
+        return -ENOSPC;
+        
+    // Reserve inode entry
+    bitvector_clear(ospfs_block(osup->os_firstinob), entry_ino);
+    
+    // Set directory entry info
+    od->od_ino = entry_ino;
+    memcpy(od->od_name, dentry->d_name.name, dentry->d_name.len);
+    
+    // Initalize new inode
+    new_oi = ospfs_inode(entry_ino);
+    new_oi->oi_size = 0;
+    new_oi->oi_ftype = OSPFS_FTYPE_REG;
+    new_oi->oi_nlink = 1;
+    new_oi->oi_mode = mode;
 
-    /* Execute this code after your function has successfully created the
-       file.  Set entry_ino to the created file's inode number before
-       getting here. */
+    // Instantiate with actual linux system
     {
-        struct inode *i = ospfs_mk_linux_inode(dir->i_sb, entry_ino);
-        if (!i)
+        struct inode *node = ospfs_mk_linux_inode(dir->i_sb, entry_ino);
+        if (!node)
             return -ENOMEM;
-        d_instantiate(dentry, i);
+        d_instantiate(dentry, node);
         return 0;
     }
 }
