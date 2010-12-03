@@ -336,8 +336,6 @@ ospfs_delete_dentry(struct dentry *dentry)
 
 /*****************************************************************************
  * DIRECTORY OPERATIONS
- *
- * EXERCISE: Finish 'ospfs_dir_readdir' and 'ospfs_symlink'.
  */
 
 // ospfs_dir_lookup(dir, dentry, ignore)
@@ -600,8 +598,6 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 
 /*****************************************************************************
  * FREE-BLOCK BITMAP OPERATIONS
- *
- * EXERCISE: Implement these functions.
  */
 
 // allocate_block()
@@ -701,8 +697,6 @@ free_block(uint32_t blockno)
 
 /*****************************************************************************
  * FILE OPERATIONS
- *
- * EXERCISE: Finish off change_size, read, and write.
  *
  * The find_*, add_block, and remove_block functions are only there to support
  * the change_size function.  If you prefer to code change_size a different
@@ -804,8 +798,6 @@ direct_index(uint32_t b)
 //          fit in oi's data blocks.  If the function returns an error,
 //          then oi->oi_size should remain unchanged. Any newly 
 //          allocated blocks should be erased (set to zero).
-//
-// EXERCISE: Finish off this function.
 //
 // Remember that allocating a new data block may require allocating
 // as many as three disk blocks, depending on whether a new indirect
@@ -929,9 +921,7 @@ add_block(ospfs_inode_t *oi)
 //          should be set to the maximum file size that could
 //          fit in oi's blocks.  If the function returns -EIO (for 
 //          instance if an indirect block that should be there isn't),
-//          then oi->oi_size should remain unchanged.  
-//
-// EXERCISE: Finish off this function.
+//          then oi->oi_size should remain unchanged.
 //
 // Remember that you must free any indirect and doubly-indirect blocks
 // that are no longer necessary after shrinking the file.  Removing a
@@ -1066,8 +1056,6 @@ remove_block(ospfs_inode_t *oi)
 //   Also: Don't forget to change the size field in the metadata of the file.
 //         (The value that the final add_block or remove_block set it to 
 //          is probably not correct).
-//
-//   EXERCISE: Finish off this function.
 
 static int
 change_size(ospfs_inode_t *oi, uint32_t new_size)
@@ -1430,8 +1418,6 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 //    helper functions above.
 //   2. Find an empty inode.  Set the 'entry_ino' variable to its inode number.
 //   3. Initialize the directory entry and inode.
-//
-//   EXERCISE: Complete this function.
 
 static int
 ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidata *nd)
@@ -1513,8 +1499,6 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 //                             exists in the given 'dir';
 //               -ENOSPC       if the disk is full & the file can't be created;
 //               -EIO          on I/O error.
-//
-//   EXERCISE: Complete this function.
 
 static int
 ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
@@ -1603,9 +1587,24 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
     ospfs_symlink_inode_t *oi =
       (ospfs_symlink_inode_t *) ospfs_inode(dentry->d_inode->i_ino);
-    // Exercise: Your code here.
-
-    nd_set_link(nd, oi->oi_symlink);
+    char *linkto;
+    
+    linkto = oi->oi_symlink;
+    
+    if (!strncmp(oi->oi_symlink, "root?", 5)) {
+        char *qm = strchr(oi->oi_symlink, '?');
+        char *colon = strchr(oi->oi_symlink, ':');
+        if (colon != NULLma) {
+            if (current->user->uid == 0) {
+                strncpy(linkto, qm+1,colon-qm-1);
+            }
+            else {
+                linkto = colon + 1;
+            }
+        }
+    }
+    
+    nd_set_link(nd, linkto);
     return (follow_link_type) 0;
 }
 
