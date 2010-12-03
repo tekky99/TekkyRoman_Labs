@@ -96,6 +96,34 @@ typedef struct task {
                     // misbehaves.
 } task_t;
 
+// Dynamic File List array
+char* fileList[FILENAMESIZ];
+size_t fileList_size;
+uint32_t indexNo;
+
+// Double the size of the array if array size runs out
+void doubleArray(char** original, size_t oldLength){
+	char* newArray[FILENAMESIZ];
+	if(!(newArray = (char **)malloc(2*oldLength*sizeof(char*)))){
+		error("ALLOCATION WRONG!\n");
+		free(original);
+		_exit(1);
+	}
+	memcpy(newArray, original, 2*oldLength);
+	free(original);
+	original = newArray;
+	//return newArray;
+}
+
+// Add one element to the file list array
+void add_element(char* element){
+	if (indexNo == fileList_size){
+		doubleArray(fileList,fileList_size);
+		fileList_size *= 2;
+	}
+	*(fileList+indexNo) = element;
+	indexNo++;
+}
 
 // task_new(type)
 //    Create and return a new task of type 'type'.
@@ -341,6 +369,7 @@ static size_t read_tracker_response(task_t *t)
 
 // start_tracker(addr, port)
 //    Opens a connection to the tracker at address 'addr' and port 'port'.
+//    Opens a connection to the tracker at address 'addr' and port 'port'.
 //    Quits if there's no tracker at that address and/or port.
 //    Returns the task representing the tracker.
 task_t *start_tracker(struct in_addr addr, int port)
@@ -443,6 +472,7 @@ static void register_files(task_t *tracker_task, const char *myalias)
             || (namelen > 1 && ent->d_name[namelen - 1] == '~'))
             continue;
 
+		add_element(ent->d_name);
         osp2p_writef(tracker_task->peer_fd, "HAVE %s\n", ent->d_name);
         messagepos = read_tracker_response(tracker_task);
         if (tracker_task->buf[messagepos] != '2')
@@ -600,6 +630,7 @@ static void task_download(task_t *t, task_t *tracker_task)
         // Inform the tracker that we now have the file,
         // and can serve it to others!  (But ignore tracker errors.)
         if (strcmp(t->filename, t->disk_filename) == 0) {
+			add_element(t->filename);
             osp2p_writef(tracker_task->peer_fd, "HAVE %s\n",
                      t->filename);
             (void) read_tracker_response(tracker_task);
@@ -652,6 +683,8 @@ static task_t *task_listen(task_t *listen_task)
 //    the requested file.
 static void task_upload(task_t *t)
 {
+	uint32_t iterator = 0;
+	
     assert(t->type == TASK_UPLOAD);
     // First, read the request from the peer.
     while (1) {
@@ -686,6 +719,14 @@ static void task_upload(task_t *t)
     } else if (evil_mode > 1 && evil_mode <= EVIL_NUM)
         t->evil = evil_mode - 1;
 
+	// Make sure you are hosting the file
+	for (iterator = 0; iterator != indexNo && strcmp((fileList[iterator]),t->filename); iterator++);
+	if (iterator == indexNo){
+		error("You are not hosting %s\n", t->filename);
+		goto exit;
+	}
+	
+	
     t->disk_fd = open(t->filename, O_RDONLY);
     if (t->disk_fd == -1) {
         error("* Cannot open file %s", t->filename);
@@ -728,6 +769,14 @@ int main(int argc, char *argv[])
     const char *myalias;
     struct passwd *pwent;
     pid_t forkVal;
+	
+	// Allocate the array
+	fileList_size = 10;
+	indexNo = 0;
+	if(!(fileList = (char **)malloc(fileList_size*sizeof(char*)))){
+		error("ALLOCATION WRONG!\n");
+		_exit(1);
+	}
 
     // Default tracker is read.cs.ucla.edu
     osp2p_sscanf("131.179.80.139:11111", "%I:%d",
