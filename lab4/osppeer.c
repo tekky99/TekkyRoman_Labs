@@ -102,9 +102,9 @@ size_t fileList_size;
 uint32_t indexNo;
 
 // Double the size of the array if array size runs out
-void doubleArray(char** original, size_t oldLength){
-	char* newArray[FILENAMESIZ];
-	if(!(newArray = (char **)malloc(2*oldLength*sizeof(char*)))){
+void doubleArray(char* original, size_t oldLength){
+	char* newArray;
+	if(!(newArray = (char *)malloc(2*oldLength*sizeof(char*)))){
 		error("ALLOCATION WRONG!\n");
 		free(original);
 		_exit(1);
@@ -775,7 +775,7 @@ int main(int argc, char *argv[])
 	// Allocate the array
 	fileList_size = 10;
 	indexNo = 0;
-	if(!(fileList = (char **)malloc(fileList_size*sizeof(char*)))){
+	if(!(fileList = (char *)malloc(fileList_size*sizeof(char*)))){
 		error("ALLOCATION WRONG!\n");
 		_exit(1);
 	}
