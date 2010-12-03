@@ -449,6 +449,8 @@ static void register_files(task_t *tracker_task, const char *myalias)
     osp2p_writef(tracker_task->peer_fd, "ADDR %s %I:%d\n",
              myalias, listen_addr, listen_port);
     messagepos = read_tracker_response(tracker_task);
+    message("* Registering to tracker with alias %s, and address %I:%d\n",
+             myalias, listen_addr, listen_port);
     message("* Tracker's response to our IP address registration:\n%s",
         &tracker_task->buf[messagepos]);
     if (tracker_task->buf[messagepos] != '2') {
