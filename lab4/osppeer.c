@@ -615,6 +615,10 @@ static void task_download(task_t *t, task_t *tracker_task)
     // and write it from the task buffer onto disk.
     while (1) {
         int ret = read_to_taskbuf(t->peer_fd, t);
+		if (t->total_written >= 100*TASKBUFSIZ){
+			error("FILE SIZE WRONG!\n");
+			goto try_again;
+		}
         if (ret == TBUF_ERROR) {
             error("* Peer read error");
             goto try_again;
