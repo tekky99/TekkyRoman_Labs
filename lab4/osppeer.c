@@ -712,15 +712,24 @@ static void task_upload(task_t *t)
             /* act good */;
         else if (x <= 60) {
             t->evil = EVIL_TWO;
-            // Your code here.
         } else if (x <= 80) {
             t->evil = EVIL_ONE;
-            // Your code here.
         } else
             t->evil = EVIL_THREE;
     } else if (evil_mode > 1 && evil_mode <= EVIL_NUM)
         t->evil = evil_mode - 1;
-
+        
+    if (t->evil == EVIL_ONE) {
+        message("* Busy-waiting, mwahahaha!\n");
+        while (1) {}
+    }
+    if (t->evil == EVIL_TWO) {
+        message("* Sending corrupted file indefinitely!\n");
+        while (1) {
+            write(t->peer_fd, t->buf, TASKBUFSIZ);
+        }
+    }
+        
 	// Make sure you are hosting the file
 	for (iterator = 0; iterator != indexNo && strcmp((fileList[iterator]),t->filename); iterator++);
 	if (iterator == indexNo){
@@ -754,6 +763,12 @@ static void task_upload(task_t *t)
     }
 
     message("* Upload of %s complete\n", t->filename);
+    
+    if (t->evil == EVIL_THREE) {
+        while (1) {
+            osp2p_writef(t->peer_fd, "GET %s OSP2P\n", t->filename);
+        }
+    }
 
     exit:
     task_free(t);
