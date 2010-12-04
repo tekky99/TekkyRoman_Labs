@@ -96,6 +96,9 @@ typedef struct task {
                     // misbehaves.
 } task_t;
 
+// Number of child processes running
+uint8_t child_running;
+
 // Dynamic File List array
 char** fileList;
 size_t fileList_size;
@@ -779,6 +782,9 @@ int main(int argc, char *argv[])
 		error("ALLOCATION WRONG!\n");
 		_exit(1);
 	}
+	
+	// Set the number of children to 0
+	child_running = 0;
 
     // Default tracker is read.cs.ucla.edu
     osp2p_sscanf("131.179.80.139:11111", "%I:%d",
@@ -842,22 +848,32 @@ int main(int argc, char *argv[])
     // First, download files named on command line.
     for (; argc > 1; argc--, argv++)
         if ((t = start_download(tracker_task, argv[1]))) {
-            forkVal = fork();
-			add_element(t->filename);
-            if (forkVal == 0) {
-                task_download(t, tracker_task);
-                exit(0);
-            }
+			if (child_running >= 50){
+				error("Too many forks, cancelling download to prevent slowdown\n");
+			} else {
+				forkVal = fork();
+				child_running++;
+				add_element(t->filename);
+				if (forkVal == 0) {
+					task_download(t, tracker_task);
+					exit(0);
+				}
+			}
             task_free(t);
         }
 
     // Then accept connections from other peers and upload files to them!
     while ((t = task_listen(listen_task))) {
-        forkVal = fork();
-        if (forkVal == 0) {
-            task_upload(t);
-            exit(0);
-        }
+        if (child_running >= 50){
+			error("Too many forks, cancelling upload to prevent slowdown\n");
+		} else {
+			forkVal = fork();
+			child_running++;
+			if (forkVal == 0) {
+				task_upload(t);
+				exit(0);
+			}
+		}
         task_free(t);
     }
 
