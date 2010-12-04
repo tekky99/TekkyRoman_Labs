@@ -97,14 +97,14 @@ typedef struct task {
 } task_t;
 
 // Dynamic File List array
-char* fileList[FILENAMESIZ];
+char** fileList;
 size_t fileList_size;
 uint32_t indexNo;
 
 // Double the size of the array if array size runs out
-void doubleArray(char* original, size_t oldLength){
-	char* newArray;
-	if(!(newArray = (char *)malloc(2*oldLength*sizeof(char*)))){
+void doubleArray(char** original, size_t oldLength){
+	char** newArray;
+	if(!(newArray = malloc(2*oldLength*sizeof(char*)))){
 		error("ALLOCATION WRONG!\n");
 		free(original);
 		_exit(1);
@@ -121,7 +121,8 @@ void add_element(char* element){
 		doubleArray(fileList,fileList_size);
 		fileList_size *= 2;
 	}
-	*(fileList+indexNo) = element;
+	fileList[indexNo] = (char *) malloc(FILENAMESIZ*sizeof(char));
+	strcpy(fileList[indexNo], element);
 	indexNo++;
 }
 
@@ -632,7 +633,6 @@ static void task_download(task_t *t, task_t *tracker_task)
         // Inform the tracker that we now have the file,
         // and can serve it to others!  (But ignore tracker errors.)
         if (strcmp(t->filename, t->disk_filename) == 0) {
-			add_element(t->filename);
             osp2p_writef(tracker_task->peer_fd, "HAVE %s\n",
                      t->filename);
             (void) read_tracker_response(tracker_task);
@@ -773,9 +773,9 @@ int main(int argc, char *argv[])
     pid_t forkVal;
 	
 	// Allocate the array
-	fileList_size = 10;
+	fileList_size = 50;
 	indexNo = 0;
-	if(!(fileList = (char *)malloc(fileList_size*sizeof(char*)))){
+	if(!(fileList = malloc(fileList_size*sizeof(char*)))){
 		error("ALLOCATION WRONG!\n");
 		_exit(1);
 	}
@@ -843,6 +843,7 @@ int main(int argc, char *argv[])
     for (; argc > 1; argc--, argv++)
         if ((t = start_download(tracker_task, argv[1]))) {
             forkVal = fork();
+			add_element(t->filename);
             if (forkVal == 0) {
                 task_download(t, tracker_task);
                 exit(0);
